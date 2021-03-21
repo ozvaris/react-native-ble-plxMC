@@ -1,6 +1,6 @@
 // @flow
 
-import {State, Device, BleError} from 'react-native-ble-plx';
+import { State, Device, BleError } from 'react-native-ble-plx';
 
 export type Action =
   | LogAction
@@ -16,7 +16,7 @@ export type Action =
 
 export type LogAction = {|
   type: 'LOG',
-  message: string,
+    message: string,
 |};
 
 export type ClearLogsAction = {|
@@ -25,7 +25,7 @@ export type ClearLogsAction = {|
 
 export type ConnectAction = {|
   type: 'CONNECT',
-  device: Device,
+    device: Device,
 |};
 
 export type DisconnectAction = {|
@@ -34,17 +34,17 @@ export type DisconnectAction = {|
 
 export type UpdateConnectionStateAction = {|
   type: 'UPDATE_CONNECTION_STATE',
-  state: $Keys<typeof ConnectionState>,
+    state: $Keys < typeof ConnectionState >,
 |};
 
 export type BleStateUpdatedAction = {|
   type: 'BLE_STATE_UPDATED',
-  state: $Keys<typeof State>,
+    state: $Keys < typeof State >,
 |};
 
 export type SensorTagFoundAction = {|
   type: 'SENSOR_TAG_FOUND',
-  device: Device,
+    device: Device,
 |};
 
 export type ForgetSensorTagAction = {|
@@ -53,7 +53,7 @@ export type ForgetSensorTagAction = {|
 
 export type ExecuteTestAction = {|
   type: 'EXECUTE_TEST',
-  id: string,
+    id: string,
 |};
 
 export type TestFinishedAction = {|
@@ -67,6 +67,7 @@ export type ReduxState = {
   connectionState: $Keys<typeof ConnectionState>,
   currentTest: ?string,
   bleState: $Keys<typeof State>,
+  devices: Array<string>,
 };
 
 export const ConnectionState = {
@@ -84,6 +85,7 @@ export const initialState: ReduxState = {
   connectionState: ConnectionState.DISCONNECTED,
   currentTest: null,
   logs: [],
+  devices: [],
 };
 
 export function log(message: string): LogAction {
@@ -96,15 +98,15 @@ export function log(message: string): LogAction {
 export function logError(error: BleError) {
   return log(
     'ERROR: ' +
-      error.message +
-      ', ATT: ' +
-      (error.attErrorCode || 'null') +
-      ', iOS: ' +
-      (error.iosErrorCode || 'null') +
-      ', android: ' +
-      (error.androidErrorCode || 'null') +
-      ', reason: ' +
-      (error.reason || 'null'),
+    error.message +
+    ', ATT: ' +
+    (error.attErrorCode || 'null') +
+    ', iOS: ' +
+    (error.iosErrorCode || 'null') +
+    ', android: ' +
+    (error.androidErrorCode || 'null') +
+    ', reason: ' +
+    (error.reason || 'null'),
   );
 }
 
@@ -135,6 +137,7 @@ export function disconnect(): DisconnectAction {
     type: 'DISCONNECT',
   };
 }
+
 
 export function bleStateUpdated(
   state: $Keys<typeof State>,
@@ -177,9 +180,9 @@ export function reducer(
 ): ReduxState {
   switch (action.type) {
     case 'LOG':
-      return {...state, logs: [action.message, ...state.logs]};
+      return { ...state, logs: [action.message, ...state.logs] };
     case 'CLEAR_LOGS':
-      return {...state, logs: []};
+      return { ...state, logs: [] };
     case 'UPDATE_CONNECTION_STATE':
       return {
         ...state,
@@ -198,6 +201,7 @@ export function reducer(
         ...state,
         activeSensorTag: action.device,
         logs: ['SensorTag found: ' + action.device.id, ...state.logs],
+        devices: [action.device, ...state.devices],
       };
     case 'FORGET_SENSOR_TAG':
       return {
@@ -208,9 +212,9 @@ export function reducer(
       if (state.connectionState !== ConnectionState.CONNECTED) {
         return state;
       }
-      return {...state, currentTest: action.id};
+      return { ...state, currentTest: action.id };
     case 'TEST_FINISHED':
-      return {...state, currentTest: null};
+      return { ...state, currentTest: null };
     default:
       return state;
   }

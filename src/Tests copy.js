@@ -51,31 +51,31 @@ function* readAllCharacteristics(device: Device): Generator<*, boolean, *> {
           characteristic.descriptors,
         ]);
 
-        // for (const descriptor of descriptors) {
-        //   yield put(log('* Found descriptor: ' + descriptor.uuid));
-        //   const d: Descriptor = yield call([descriptor, descriptor.read]);
-        //   yield put(log('Descriptor value: ' + (d.value || 'null')));
-        //   if (d.uuid === '00002902-0000-1000-8000-00805f9b34fb') {
-        //     yield put(log('Skipping CCC'));
-        //     continue;
-        //   }
-        //   try {
-        //     yield call([descriptor, descriptor.write], 'AAA=');
-        //   } catch (error) {
-        //     const bleError: BleError = error;
-        //     if (bleError.errorCode === BleErrorCode.DescriptorWriteFailed) {
-        //       yield put(log('Cannot write to: ' + d.uuid));
-        //     } else {
-        //       throw error;
-        //     }
-        //   }
-        // }
+        for (const descriptor of descriptors) {
+          yield put(log('* Found descriptor: ' + descriptor.uuid));
+          const d: Descriptor = yield call([descriptor, descriptor.read]);
+          yield put(log('Descriptor value: ' + (d.value || 'null')));
+          if (d.uuid === '00002902-0000-1000-8000-00805f9b34fb') {
+            yield put(log('Skipping CCC'));
+            continue;
+          }
+          try {
+            yield call([descriptor, descriptor.write], 'AAA=');
+          } catch (error) {
+            const bleError: BleError = error;
+            if (bleError.errorCode === BleErrorCode.DescriptorWriteFailed) {
+              yield put(log('Cannot write to: ' + d.uuid));
+            } else {
+              throw error;
+            }
+          }
+        }
 
         yield put(log('Found characteristic: ' + characteristic.uuid));
         if (characteristic.isReadable) {
           yield put(log('Reading value...'));
           var c = yield call([characteristic, characteristic.read]);
-          const value = base64.decode(c.value)
+          const value = base64.encode(c.value)
           yield put(log('Got base64 value: ' + value));
           if (characteristic.isWritableWithResponse) {
             yield call(
