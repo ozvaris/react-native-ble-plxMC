@@ -1,1 +1,1 @@
-# react-native-ble-plx (Single Bluetooth Client)
+# react-native-ble-plx (Multiple Bluetooth Client)
