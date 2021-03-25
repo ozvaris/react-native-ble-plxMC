@@ -24,6 +24,7 @@ import {
   type ExecuteTestAction,
   sensorTagFound,
   ConnectionState,
+  bleDevice
 } from './Reducer';
 import {
   BleManager,
@@ -63,6 +64,7 @@ function* handleBleState(manager: BleManager): Generator<*, *, *> {
   try {
     for (; ;) {
       const newState = yield take(stateChannel);
+
       yield put(bleStateUpdated(newState));
     }
   } finally {
@@ -98,10 +100,13 @@ function* handleScanning(manager: BleManager): Generator<*, *, *> {
         bleState = action.state;
         break;
       case 'UPDATE_CONNECTION_STATE':
-        connectionState = action.state;
+        connectionState = action.bleDevice.connectionState;
+        yield put(log('cs' + connectionState));
+
         break;
     }
 
+    yield put(log('cs1' + connectionState));
     const enableScanning =
       bleState === State.PoweredOn &&
       (connectionState === ConnectionState.DISCONNECTING ||
@@ -146,9 +151,9 @@ function* scan(manager: BleManager): Generator<*, *, *> {
     }
   }
 
-  yield put(log('Scanning started2...'));
+  yield put(log('Scanning started...'));
   const scanningChannel = yield eventChannel((emit) => {
-    let array = []
+
     manager.startDeviceScan(
       null,
       { allowDuplicates: false, scanMode: 2 },
@@ -157,12 +162,15 @@ function* scan(manager: BleManager): Generator<*, *, *> {
           emit([error, scannedDevice]);
           return;
         }
-        if (scannedDevice != null && (scannedDevice.localName === 'Internet Of Furniture' ||
-          scannedDevice.localName === 'INTERNET ON FURNITURE' ||
-          scannedDevice.localName === 'NEBULA' ||
-          scannedDevice.localName === 'AURELIAN' ||
-          scannedDevice.localName === 'PARAGON')) {
-          scannedDevice.id && array.push(scannedDevice.id)
+        if (scannedDevice != null &&
+          (
+            //scannedDevice.localName === 'Internet Of Furniture' ||
+            //scannedDevice.localName === 'INTERNET ON FURNITURE' ||
+            scannedDevice.localName === 'NEBULA' ||
+            scannedDevice.localName === 'AURELIAN' //||
+            //scannedDevice.localName === 'PARAGON'
+          )) {
+
           emit([error, scannedDevice]);
         }
       },
@@ -174,20 +182,25 @@ function* scan(manager: BleManager): Generator<*, *, *> {
 
   try {
     for (; ;) {
-      const [error, scannedDevice]: [?BleError,?Device] = yield take(
-        scanningChannel,
-      );
+      //yield put(log('looping1...'));
+      const [error, scannedDevice]: [?BleError,?Device] = yield take(scanningChannel,);
       if (error != null) {
+        yield put(log("Error" + error.message));
       }
       if (scannedDevice != null) {
         yield put(sensorTagFound(scannedDevice));
       }
+      //yield put(log('looping2...'));
     }
+    yield put(log('Exit loop...'));
   } catch (error) {
+    yield put(log(error.message));
   } finally {
-    yield put(log('Scanning stopped...'));
+    yield put(log('Scanning stopped1...'));
     if (yield cancelled()) {
+      yield put(log('Scanning channel close...'));
       scanningChannel.close();
+
     }
   }
 }
@@ -198,6 +211,7 @@ function* handleConnection(manager: BleManager): Generator<*, *, *> {
   for (; ;) {
     // Take action
     const { device }: ConnectAction = yield take('CONNECT');
+    yield put(log("Connected log"))
 
     const disconnectedChannel = yield eventChannel((emit) => {
       const subscription = device.onDisconnected((error) => {
@@ -213,12 +227,20 @@ function* handleConnection(manager: BleManager): Generator<*, *, *> {
       'EXECUTE_TEST',
     ]);
 
+    let bleDevice: bleDevice = {
+      id: device.id,
+
+    }
+
     try {
-      yield put(updateConnectionState(ConnectionState.CONNECTING));
+      bleDevice.connectionState = ConnectionState.CONNECTING
+      yield put(updateConnectionState(bleDevice));
       yield call([device, device.connect]);
-      yield put(updateConnectionState(ConnectionState.DISCOVERING));
+      bleDevice.connectionState = ConnectionState.DISCOVERING;
+      yield put(updateConnectionState(bleDevice));
       yield call([device, device.discoverAllServicesAndCharacteristics]);
-      yield put(updateConnectionState(ConnectionState.CONNECTED));
+      bleDevice.connectionState = ConnectionState.CONNECTED;
+      yield put(updateConnectionState(bleDevice));
 
       for (; ;) {
         const { deviceAction, disconnected } = yield race({
@@ -229,7 +251,8 @@ function* handleConnection(manager: BleManager): Generator<*, *, *> {
         if (deviceAction) {
           if (deviceAction.type === 'DISCONNECT') {
             yield put(log('Disconnected by user...'));
-            yield put(updateConnectionState(ConnectionState.DISCONNECTING));
+            bleDevice.connectionState = ConnectionState.DISCONNECTING;
+            yield put(updateConnectionState(bleDevice));
             yield call([device, device.cancelConnection]);
             break;
           }
@@ -252,7 +275,8 @@ function* handleConnection(manager: BleManager): Generator<*, *, *> {
     } finally {
       disconnectedChannel.close();
       yield put(testFinished());
-      yield put(updateConnectionState(ConnectionState.DISCONNECTED));
+      bleDevice.connectionState = ConnectionState.DISCONNECTED
+      yield put(updateConnectionState(bleDevice));
     }
   }
 }

@@ -12,8 +12,13 @@ export type Action =
   | SensorTagFoundAction
   | ForgetSensorTagAction
   | ExecuteTestAction
-  | TestFinishedAction;
+  | TestFinishedAction
+  | ClearDevicesAction
+  | StartScanAction;
 
+export type StartScanAction = {|
+  type: 'START_SCAN',      
+  |};
 export type LogAction = {|
   type: 'LOG',
     message: string,
@@ -21,6 +26,10 @@ export type LogAction = {|
 
 export type ClearLogsAction = {|
   type: 'CLEAR_LOGS',
+|};
+
+export type ClearDevicesAction = {|
+  type: 'CLEAR_DEVICES',
 |};
 
 export type ConnectAction = {|
@@ -34,8 +43,8 @@ export type DisconnectAction = {|
 
 export type UpdateConnectionStateAction = {|
   type: 'UPDATE_CONNECTION_STATE',
-    state: $Keys < typeof ConnectionState >,
-|};
+    bleDevice: bleDevice
+      |};
 
 export type BleStateUpdatedAction = {|
   type: 'BLE_STATE_UPDATED',
@@ -62,12 +71,9 @@ export type TestFinishedAction = {|
 
 export type ReduxState = {
   logs: Array<string>,
-  activeError: ?BleError,
-  activeSensorTag: ?Device,
-  connectionState: $Keys<typeof ConnectionState>,
   currentTest: ?string,
   bleState: $Keys<typeof State>,
-  devices: Array<string>,
+  bleDevices: Array<bleDevice>,
 };
 
 export const ConnectionState = {
@@ -78,14 +84,21 @@ export const ConnectionState = {
   DISCONNECTING: 'DISCONNECTING',
 };
 
+export type bleDevice = {
+  type: 'bleDevice',
+  activeError: ?BleErro,
+  device: ?Device,
+  connectionState: $Keys<typeof ConnectionState>,
+  id: ?string,
+  localName: ?string
+
+}
+
 export const initialState: ReduxState = {
   bleState: State.Unknown,
-  activeError: null,
-  activeSensorTag: null,
-  connectionState: ConnectionState.DISCONNECTED,
   currentTest: null,
   logs: [],
-  devices: [],
+  bleDevices: [],
 };
 
 export function log(message: string): LogAction {
@@ -116,6 +129,12 @@ export function clearLogs(): ClearLogsAction {
   };
 }
 
+export function clearDevices(): ClearDevicesAction {
+  return {
+    type: 'CLEAR_DEVICES',
+  };
+}
+
 export function connect(device: Device): ConnectAction {
   return {
     type: 'CONNECT',
@@ -123,12 +142,17 @@ export function connect(device: Device): ConnectAction {
   };
 }
 
-export function updateConnectionState(
-  state: $Keys<typeof ConnectionState>,
-): UpdateConnectionStateAction {
+export function blStartScan(device: Device): StartScanAction {
+  return {
+    type: 'START_SCAN',
+    device,
+  };
+}
+
+export function updateConnectionState(bleDevice: bleDevice,): UpdateConnectionStateAction {
   return {
     type: 'UPDATE_CONNECTION_STATE',
-    state,
+    bleDevice
   };
 }
 
@@ -180,14 +204,24 @@ export function reducer(
 ): ReduxState {
   switch (action.type) {
     case 'LOG':
+      //console.log(action.message)
       return { ...state, logs: [action.message, ...state.logs] };
     case 'CLEAR_LOGS':
       return { ...state, logs: [] };
+    case 'CLEAR_DEVICES':
+      return { ...state, bleDevices: [] };
     case 'UPDATE_CONNECTION_STATE':
+      //console.log("UPDATE_CONNECTION_STATE");
+      //console.log(action.bleDevice);
+      var newData = state.bleDevices.map(el => {
+        if (el.id == action.bleDevice.id)
+          return Object.assign({}, el, { connectionState: action.bleDevice.connectionState })
+        return el
+      });
       return {
         ...state,
-        connectionState: action.state,
-        logs: ['Connection state changed: ' + action.state, ...state.logs],
+        bleDevices: newData,
+        logs: ['Connection state changed: ' + action.bleDevice.connectionState, ...state.logs],
       };
     case 'BLE_STATE_UPDATED':
       return {
@@ -196,12 +230,49 @@ export function reducer(
         logs: ['BLE state changed: ' + action.state, ...state.logs],
       };
     case 'SENSOR_TAG_FOUND':
-      if (state.activeSensorTag) return state;
+
+      //if (state.activeSensorTag) return state;
+      //console.log("TESTSS" + state.bleDevices.length);
+      let _bleDevices = [...state.bleDevices];
+
+      for (i = 0; i < state.bleDevices.length; i++) {
+        //console.log("bleDevices");
+        //console.log(state);
+        if (_bleDevices[i].localName == action.device.localName) {
+          return state;
+        }
+      }
+
+      //console.log(action.device)
+
+
+      let _bleDevice: bleDevice = {
+        activeError: null,
+        connectionState: ConnectionState.DISCONNECTED,
+        id: action.device.id,
+        localName: action.device.localName,
+        device: action.device
+      };
+
+
+
+      _bleDevices.push(_bleDevice);
+
+      //console.log("bleDevices1");
+      //console.log(_bleDevice);
+
+      // let _bleDevice = {
+      //   activeError: null,
+      //   activeSensorTag: null,
+      //   activeconnectionState: ConnectionState.DISCONNECTED,
+      //   DeviceId: null
+      // };
+
+
       return {
         ...state,
-        activeSensorTag: action.device,
-        logs: ['SensorTag found: ' + action.device.id, ...state.logs],
-        devices: [action.device, ...state.devices],
+        logs: ['SensorTag found: ' + action.device.localName + " " + action.device.id, ...state.logs],
+        bleDevices: _bleDevices,
       };
     case 'FORGET_SENSOR_TAG':
       return {
