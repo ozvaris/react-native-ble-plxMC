@@ -38,7 +38,8 @@ export type ConnectAction = {|
 |};
 
 export type DisconnectAction = {|
-  type: 'DISCONNECT',
+  type: string,
+    device: Device,
 |};
 
 export type UpdateConnectionStateAction = {|
@@ -141,6 +142,12 @@ export function connect(device: Device): ConnectAction {
     device,
   };
 }
+export function disconnect(device: Device): DisconnectAction {
+  return {
+    type: 'DISCONNECT' + device.id,
+    device,
+  };
+}
 
 export function blStartScan(device: Device): StartScanAction {
   return {
@@ -156,11 +163,7 @@ export function updateConnectionState(bleDevice: bleDevice,): UpdateConnectionSt
   };
 }
 
-export function disconnect(): DisconnectAction {
-  return {
-    type: 'DISCONNECT',
-  };
-}
+
 
 
 export function bleStateUpdated(
@@ -204,8 +207,8 @@ export function reducer(
 ): ReduxState {
   switch (action.type) {
     case 'LOG':
-      //console.log(action.message)
-      return { ...state, logs: [action.message, ...state.logs] };
+      console.log(action.message)
+    //return { ...state, logs: [action.message, ...state.logs] };
     case 'CLEAR_LOGS':
       return { ...state, logs: [] };
     case 'CLEAR_DEVICES':

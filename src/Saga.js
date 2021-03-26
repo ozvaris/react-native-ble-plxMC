@@ -11,6 +11,7 @@ import {
   race,
   cancelled,
   actionChannel,
+  takeEvery,
 } from 'redux-saga/effects';
 import {
   log,
@@ -212,72 +213,93 @@ function* handleConnection(manager: BleManager): Generator<*, *, *> {
     // Take action
     const { device }: ConnectAction = yield take('CONNECT');
     yield put(log("Connected log"))
+    yield put(log(device))
+    yield fork(BleConnect, device)
 
-    const disconnectedChannel = yield eventChannel((emit) => {
-      const subscription = device.onDisconnected((error) => {
-        emit({ type: 'DISCONNECTED', error: error });
+
+  }
+}
+
+function* BleConnect(device: Device): Generator<*, *, *> {
+  var callDevice: Device
+  const disconnectedChannel = yield eventChannel((emit) => {
+    const subscription = device.onDisconnected((error) => {
+      emit({ type: 'DISCONNECTED', error: error });
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, buffers.expanding(1));
+
+  const deviceActionChannel = yield actionChannel([
+    'DISCONNECT' + device.id,
+    'EXECUTE_TEST',
+  ]);
+
+
+  let bleDevice: bleDevice = {
+    id: device.id,
+
+  }
+
+  try {
+    bleDevice.connectionState = ConnectionState.CONNECTING
+    yield put(updateConnectionState(bleDevice));
+    yield call([device, device.connect]);
+    bleDevice.connectionState = ConnectionState.DISCOVERING;
+    yield put(updateConnectionState(bleDevice));
+    yield call([device, device.discoverAllServicesAndCharacteristics]);
+    bleDevice.connectionState = ConnectionState.CONNECTED;
+    yield put(updateConnectionState(bleDevice));
+
+    for (; ;) {
+      yield put(log('waiting response1'));
+      const { deviceAction, disconnected } = yield race({
+        deviceAction: take(deviceActionChannel),
+        disconnected: take(disconnectedChannel),
       });
-      return () => {
-        subscription.remove();
-      };
-    }, buffers.expanding(1));
 
-    const deviceActionChannel = yield actionChannel([
-      'DISCONNECT',
-      'EXECUTE_TEST',
-    ]);
+      yield put(log('waiting response2'));
 
-    let bleDevice: bleDevice = {
-      id: device.id,
-
-    }
-
-    try {
-      bleDevice.connectionState = ConnectionState.CONNECTING
-      yield put(updateConnectionState(bleDevice));
-      yield call([device, device.connect]);
-      bleDevice.connectionState = ConnectionState.DISCOVERING;
-      yield put(updateConnectionState(bleDevice));
-      yield call([device, device.discoverAllServicesAndCharacteristics]);
-      bleDevice.connectionState = ConnectionState.CONNECTED;
-      yield put(updateConnectionState(bleDevice));
-
-      for (; ;) {
-        const { deviceAction, disconnected } = yield race({
-          deviceAction: take(deviceActionChannel),
-          disconnected: take(disconnectedChannel),
-        });
-
-        if (deviceAction) {
-          if (deviceAction.type === 'DISCONNECT') {
-            yield put(log('Disconnected by user...'));
+      if (deviceAction) {
+        if (deviceAction.type === 'DISCONNECT' + device.id) {
+          if (deviceAction.device.id === device.id) {
+            yield put(log('Disconnected by user...' + device.id));
             bleDevice.connectionState = ConnectionState.DISCONNECTING;
             yield put(updateConnectionState(bleDevice));
             yield call([device, device.cancelConnection]);
-            break;
+            disconnectedChannel.close();
+            bleDevice.connectionState = ConnectionState.DISCONNECTED
+            yield put(updateConnectionState(bleDevice));
           }
-          if (deviceAction.type === 'EXECUTE_TEST') {
-            if (testTask != null) {
-              yield cancel(testTask);
-            }
-            testTask = yield fork(executeTest, device, deviceAction);
-          }
-        } else if (disconnected) {
-          yield put(log('Disconnected by device...'));
-          if (disconnected.error != null) {
-            yield put(logError(disconnected.error));
+          else {
+            yield put(log('Not this device...' + device.id));
+            yield put(log('Not this device...' + deviceAction.device.id));
+
+
           }
           break;
+
         }
+        if (deviceAction.type === 'EXECUTE_TEST') {
+          if (testTask != null) {
+            yield cancel(testTask);
+          }
+          testTask = yield fork(executeTest, device, deviceAction);
+        }
+      } else if (disconnected) {
+        yield put(log('Disconnected by device...'));
+        if (disconnected.error != null) {
+          yield put(logError(disconnected.error));
+        }
+        break;
       }
-    } catch (error) {
-      yield put(logError(error));
-    } finally {
-      disconnectedChannel.close();
-      yield put(testFinished());
-      bleDevice.connectionState = ConnectionState.DISCONNECTED
-      yield put(updateConnectionState(bleDevice));
     }
+  } catch (error) {
+    yield put(logError(error));
+  } finally {
+    yield put(testFinished());
+
   }
 }
 
