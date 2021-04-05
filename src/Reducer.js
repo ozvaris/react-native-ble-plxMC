@@ -12,7 +12,9 @@ export type Action =
   | SensorTagFoundAction
   | ForgetSensorTagAction
   | ExecuteTestAction
+  | WriteTagAction
   | TestFinishedAction
+  | WriteFinishedAction
   | ClearDevicesAction
   | StartScanAction;
 
@@ -63,18 +65,25 @@ export type ForgetSensorTagAction = {|
 
 export type ExecuteTestAction = {|
   type: 'EXECUTE_TEST',
-    id: string,
-|};
-
+    id: string
+      |};
 export type TestFinishedAction = {|
   type: 'TEST_FINISHED',
 |};
+export type WriteTagAction = {|
+  type: 'WRITE_TAG',
+    id: string
+      |};
+export type WriteFinishedAction = {|
+  type: 'WRITE_FINISHED',
+      |};
 
 export type ReduxState = {
   logs: Array<string>,
   currentTest: ?string,
   bleState: $Keys<typeof State>,
   bleDevices: Array<bleDevice>,
+  currentWrite: ?string,
 };
 
 export const ConnectionState = {
@@ -91,7 +100,8 @@ export type bleDevice = {
   device: ?Device,
   connectionState: $Keys<typeof ConnectionState>,
   id: ?string,
-  localName: ?string
+  localName: ?string,
+  sValue: ?string
 
 }
 
@@ -100,6 +110,7 @@ export const initialState: ReduxState = {
   currentTest: null,
   logs: [],
   bleDevices: [],
+  currentWrite: null,
 };
 
 export function log(message: string): LogAction {
@@ -191,13 +202,23 @@ export function forgetSensorTag(): ForgetSensorTagAction {
 export function executeTest(id: string): ExecuteTestAction {
   return {
     type: 'EXECUTE_TEST',
-    id,
+    id
   };
 }
-
 export function testFinished(): TestFinishedAction {
   return {
     type: 'TEST_FINISHED',
+  };
+}
+export function writeTag(id: string): WriteTagAction {
+  return {
+    type: 'WRITE_TAG',
+    id
+  };
+}
+export function writeFinished(): WriteFinishedAction {
+  return {
+    type: 'WRITE_FINISH'
   };
 }
 
@@ -282,6 +303,18 @@ export function reducer(
         ...state,
         activeSensorTag: null,
       };
+    case 'WRITE_TAG':
+      console.log("writetag 1");
+      if (state.connectionState !== ConnectionState.CONNECTED) {
+        return state;
+      }
+      return {
+        ...state,
+        logs: ['WRITE_TAG: ' + action.device.id, ...state.logs],
+        currentWrite: action.id
+      };
+    case 'WRITE_FINISHED':
+      return { ...state, currentWrite: null };
     case 'EXECUTE_TEST':
       if (state.connectionState !== ConnectionState.CONNECTED) {
         return state;
@@ -289,6 +322,7 @@ export function reducer(
       return { ...state, currentTest: action.id };
     case 'TEST_FINISHED':
       return { ...state, currentTest: null };
+
     default:
       return state;
   }

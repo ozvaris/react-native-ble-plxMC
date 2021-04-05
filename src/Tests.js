@@ -15,7 +15,7 @@ import base64 from 'react-native-base64'
 export type SensorTagTestMetadata = {
   id: string,
   title: string,
-  execute: (device: Device) => Generator<any, boolean, any>,
+  execute: (device: Device, sValue: string) => Generator<any, boolean, any>,
 };
 
 export const SensorTagTests: { [string]: SensorTagTestMetadata } = {
@@ -29,7 +29,48 @@ export const SensorTagTests: { [string]: SensorTagTestMetadata } = {
     title: 'Read temperature',
     execute: readTemperature,
   },
+  WRITE_TAG: {
+    id: 'WRITE_TAG',
+    title: 'Write characteristics',
+    execute: ble_writeWithResponse,
+  },
 };
+
+function* ble_writeWithResponse(device: Device): Generator<*, boolean, *> {
+  try {
+    const services: Array<Service> = yield call([device, device.services]);
+    for (const service of services) {
+      yield put(log('Found service: ' + service.uuid));
+      const characteristics: Array<Characteristic> = yield call([
+        service,
+        service.characteristics,
+      ]);
+      for (const characteristic of characteristics) {
+        yield put(log('Found characteristic: ' + characteristic.uuid));
+
+        if (characteristic.uuid == "6e400002-b5a3-f393-e0a9-e50e24dcca9e") {
+          yield put(log('sssFound characteristic: ' + characteristic.uuid));
+          const val = '/rgb/000000000000/'
+          const value = base64.encode(val)
+
+          yield put(log('Successfully written value back'));
+          yield call(
+            [characteristic, characteristic.writeWithResponse],
+            value,
+          );
+          yield put(log('Successfully written value back'));
+        }
+
+
+      }
+    }
+  } catch (error) {
+    yield put(logError(error));
+    return false;
+  }
+
+  return true;
+}
 
 function* readAllCharacteristics(device: Device): Generator<*, boolean, *> {
   try {

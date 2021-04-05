@@ -19,10 +19,12 @@ import {
   updateConnectionState,
   bleStateUpdated,
   testFinished,
+  writeFinished,
   type BleStateUpdatedAction,
   type UpdateConnectionStateAction,
   type ConnectAction,
   type ExecuteTestAction,
+  type WriteTagAction,
   sensorTagFound,
   ConnectionState,
   bleDevice
@@ -207,13 +209,13 @@ function* scan(manager: BleManager): Generator<*, *, *> {
 }
 
 function* handleConnection(manager: BleManager): Generator<*, *, *> {
-  var testTask = null;
+
 
   for (; ;) {
     // Take action
     const { device }: ConnectAction = yield take('CONNECT');
-    yield put(log("Connected log"))
-    yield put(log(device))
+    yield put(log("Connected log. Device id =" + device.id))
+    //yield put(log(device))
     yield fork(BleConnect, device)
 
 
@@ -221,6 +223,9 @@ function* handleConnection(manager: BleManager): Generator<*, *, *> {
 }
 
 function* BleConnect(device: Device): Generator<*, *, *> {
+  var testTask = null;
+  var writeTask = null;
+
   var callDevice: Device
   const disconnectedChannel = yield eventChannel((emit) => {
     const subscription = device.onDisconnected((error) => {
@@ -234,6 +239,7 @@ function* BleConnect(device: Device): Generator<*, *, *> {
   const deviceActionChannel = yield actionChannel([
     'DISCONNECT' + device.id,
     'EXECUTE_TEST',
+    'WRITE_TAG',
   ]);
 
 
@@ -287,6 +293,13 @@ function* BleConnect(device: Device): Generator<*, *, *> {
           }
           testTask = yield fork(executeTest, device, deviceAction);
         }
+        if (deviceAction.type === 'WRITE_TAG') {
+          if (writeTask != null) {
+            yield cancel(writeTask);
+          }
+          put(log('writetag.'));
+          writeTask = yield fork(writeTag, device, deviceAction);
+        }
       } else if (disconnected) {
         yield put(log('Disconnected by device...'));
         if (disconnected.error != null) {
@@ -299,6 +312,7 @@ function* BleConnect(device: Device): Generator<*, *, *> {
     yield put(logError(error));
   } finally {
     yield put(testFinished());
+    yield put(writeFinished());
 
   }
 }
@@ -318,4 +332,21 @@ function* executeTest(
     yield put(log('Test failed! (' + (Date.now() - start) + ' ms)'));
   }
   yield put(testFinished());
+}
+
+function* writeTag(
+  device: Device,
+  writetag: WriteTagAction,
+): Generator<*, *, *> {
+  yield put(log('Executing test: ' + writetag.id));
+  const start = Date.now();
+  const result = yield call(SensorTagTests[writetag.id].execute, device);
+  if (result) {
+    yield put(
+      log('Test finished successfully! (' + (Date.now() - start) + ' ms)'),
+    );
+  } else {
+    yield put(log('Test failed! (' + (Date.now() - start) + ' ms)'));
+  }
+  yield put(writeFinished());
 }

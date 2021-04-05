@@ -1,6 +1,6 @@
 // @flow
 
-import React, { Component } from 'react';
+import React, { Component, useState } from 'react';
 import { connect as reduxConnect } from 'react-redux';
 import {
   StyleSheet,
@@ -19,15 +19,18 @@ import {
   connect,
   disconnect,
   executeTest,
+  writeTag,
   forgetSensorTag,
   ConnectionState,
   bleDevice
 } from './Reducer';
 import { Device, State as bleState } from 'react-native-ble-plx';
 import { SensorTagTests, type SensorTagTestMetadata } from './Tests';
+import base64 from 'react-native-base64'
 
 const Button = function (props) {
   const { onPress, title, ...restProps } = props;
+
   return (
     <TouchableOpacity onPress={onPress} {...restProps}>
       <Text
@@ -49,7 +52,9 @@ type Props = {
   connect: typeof connect,
   disconnect: typeof disconnect,
   executeTest: typeof executeTest,
+  writeTag: typeof writeTag,
   currentTest: ?string,
+  currentWrite: ?string,
   forgetSensorTag: typeof forgetSensorTag,
   bleDevices: Array<bleDevice>
 };
@@ -102,12 +107,19 @@ class SensorTag extends Component<Props, State> {
 
   isSensorTagReadyToExecuteTests(_bleDevice): boolean {
     return (
-      bleDevice.connectionState === ConnectionState.CONNECTED &&
-      this.props.currentTest == null
+      _bleDevice.connectionState === ConnectionState.CONNECTED && this.props.currentTest == null
+    );
+  }
+
+  isSensorTagReadyToWriteTag(_bleDevice): boolean {
+    return (
+      _bleDevice.connectionState === ConnectionState.CONNECTED && this.props.currentWrite == null
     );
   }
 
   renderHeader() {
+    const tests: Array<SensorTagTestMetadata> = Object.values(SensorTagTests);
+
     return (
       <View style={{ padding: 10 }}>
         <Text style={styles.textStyle} numberOfLines={1}>
@@ -129,7 +141,39 @@ class SensorTag extends Component<Props, State> {
                       this.props.connect(bleDevice.device);
                     }
                   }}
-                  title={'Connect'}
+                  title={'Conct'}
+                />
+                <View style={{ width: 5 }} />
+                <Button
+                  disabled={!this.isSensorTagReadyToExecuteTests(bleDevice)}
+                  style={{ flex: 1 }}
+                  onPress={() => {
+                    if (bleDevice.device) {
+                      //console.log(bleDevice.device);
+                      //this.props.connect(bleDevice.device);
+                      this.props.executeTest(tests[0].id);
+                    }
+                  }}
+                  title={'Test'}
+                />
+                <View style={{ width: 5 }} />
+                <Button
+                  disabled={!this.isSensorTagReadyToWriteTag(bleDevice)}
+                  style={{ flex: 1 }}
+                  onPress={() => {
+                    if (bleDevice.device) {
+                      //console.log("writetag 1");
+                      //this.props.connect(bleDevice.device);
+                      //this.setOpen(!this.open)
+                      //const val = !this.open ? '/rgb/255255255255/' : '/rgb/000000000000/'
+                      let val = '/rgb/255255255255/';
+                      const value = base64.encode(val);
+                      console.log(tests[2].id);
+                      this.props.writeTag(tests[2].id);
+                    }
+
+                  }}
+                  title={'On'}
                 />
                 <View style={{ width: 5 }} />
                 <Button
@@ -138,7 +182,7 @@ class SensorTag extends Component<Props, State> {
                   onPress={() => {
                     this.props.disconnect(bleDevice.device);
                   }}
-                  title={'Disconnect'}
+                  title={'DC'}
                 />
               </View>
             </View>
@@ -287,6 +331,7 @@ export default reduxConnect(
   (state: ReduxState): $Shape<Props> => ({
     logs: state.logs,
     currentTest: state.currentTest,
+    currentWrite: state.currentWrite,
     bleState: state.bleState,
     bleDevices: state.bleDevices
   }),
@@ -297,5 +342,6 @@ export default reduxConnect(
     disconnect,
     forgetSensorTag,
     executeTest,
+    writeTag,
   },
 )(SensorTag);
