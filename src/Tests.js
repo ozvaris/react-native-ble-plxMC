@@ -52,13 +52,12 @@ function* ble_writeWithResponse(device: Device): Generator<*, boolean, *> {
           yield put(log('sssFound characteristic: ' + characteristic.uuid));
           const val = '/rgb/000000000000/'
           const value = base64.encode(val)
-
           yield put(log('Successfully written value back'));
           yield call(
             [characteristic, characteristic.writeWithResponse],
             value,
           );
-          yield put(log('Successfully written value back'));
+
         }
 
 

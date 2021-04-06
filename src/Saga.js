@@ -35,6 +35,10 @@ import {
   Device,
   State,
   LogLevel,
+  Service,
+  Characteristic,
+  Descriptor,
+  BleErrorCode,
 } from 'react-native-ble-plx';
 import { SensorTagTests } from './Tests';
 
@@ -225,8 +229,9 @@ function* handleConnection(manager: BleManager): Generator<*, *, *> {
 function* BleConnect(device: Device): Generator<*, *, *> {
   var testTask = null;
   var writeTask = null;
-
   var callDevice: Device
+
+
   const disconnectedChannel = yield eventChannel((emit) => {
     const subscription = device.onDisconnected((error) => {
       emit({ type: 'DISCONNECTED', error: error });
@@ -235,6 +240,8 @@ function* BleConnect(device: Device): Generator<*, *, *> {
       subscription.remove();
     };
   }, buffers.expanding(1));
+
+
 
   const deviceActionChannel = yield actionChannel([
     'DISCONNECT' + device.id,
@@ -258,11 +265,41 @@ function* BleConnect(device: Device): Generator<*, *, *> {
     bleDevice.connectionState = ConnectionState.CONNECTED;
     yield put(updateConnectionState(bleDevice));
 
+    var ccharacteristic: Characteristic;
+    const services: Array<Service> = yield call([device, device.services]);
+
+    for (const service of services) {
+      yield put(log('Found service: ' + service.uuid));
+      const characteristics: Array<Characteristic> = yield call([
+        service,
+        service.characteristics,
+      ]);
+      for (const characteristic of characteristics) {
+        if (characteristic.uuid == "6e400003-b5a3-f393-e0a9-e50e24dcca9e") {
+          yield put(log('Found characteristic: ' + characteristic.uuid));
+          yield put(log('Found characteristic: ' + characteristic.isNotifiable));
+          ccharacteristic = characteristic;
+        }
+      }
+    }
+
+
+
+    const readChannel = yield eventChannel((emit) => {
+      const subscription = ccharacteristic.monitor((error, characteristic) => {
+        emit({ type: 'READNOTIFY', error: error, characteristic: characteristic });
+      });
+      return () => {
+        subscription.remove();
+      };
+    }, buffers.expanding(1));
+
     for (; ;) {
       yield put(log('waiting response1'));
-      const { deviceAction, disconnected } = yield race({
+      const { deviceAction, disconnected, readnotify } = yield race({
         deviceAction: take(deviceActionChannel),
         disconnected: take(disconnectedChannel),
+        readnotify: take(readChannel),
       });
 
       yield put(log('waiting response2'));
@@ -300,12 +337,26 @@ function* BleConnect(device: Device): Generator<*, *, *> {
           put(log('writetag.'));
           writeTask = yield fork(writeTag, device, deviceAction);
         }
-      } else if (disconnected) {
+      }
+      else if (disconnected) {
         yield put(log('Disconnected by device...'));
         if (disconnected.error != null) {
           yield put(logError(disconnected.error));
         }
+        bleDevice.connectionState = ConnectionState.DISCONNECTED
+        yield put(updateConnectionState(bleDevice));
+
         break;
+      }
+      else if (readnotify) {
+        yield put(log('Read from device...'));
+        if (readnotify.error != null) {
+          yield put(logError(readnotify.error));
+        }
+        var c = yield call([readnotify.characteristic, readnotify.characteristic.read]);
+        //const value = base64.decode(c.value)
+        yield put(log('Got base64 value: ' + c.value));
+        //break;
       }
     }
   } catch (error) {
